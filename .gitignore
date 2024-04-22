@@ -1,0 +1,10 @@
+*.pem
+*.log
+config.yml
+.env
+*~
+*.bak
+*.swp
+*.tmp
+out/
+temp/
