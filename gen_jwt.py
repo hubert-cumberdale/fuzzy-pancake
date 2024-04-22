@@ -5,36 +5,39 @@ from cryptography.hazmat.primitives import serialization
 
 # Constants
 ONE_HOUR = datetime.timedelta(hours=1)
-SUBJECT = 'user123'
-ROLES = ['admin', 'user']
+SUBJECT = 'admin'
+ROLES = ['all_access']
 
-# Generate RSA and EC Keys for different curves and save them to files
-def generate_keys():
-    # RSA Keys
+def generate_rsa_keys():
+    # Generate RSA Keys
     private_key_rsa = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    # Serialize private key
     rsa_private_pem = private_key_rsa.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption()
     )
+    # Serialize public key
     rsa_public_pem = private_key_rsa.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
-
-    # Saving RSA keys to files
+    # Save to files
     with open('rsa_private_key.pem', 'wb') as f:
         f.write(rsa_private_pem)
     with open('rsa_public_key.pem', 'wb') as f:
         f.write(rsa_public_pem)
+    return rsa_private_pem
 
-    # EC Keys for different curves
+def generate_ecdsa_keys():
+    # Define the EC curves
     curves = {
         'ES256': ec.SECP256R1(),
         'ES384': ec.SECP384R1(),
         'ES512': ec.SECP521R1()
     }
     ec_keys = {}
+    # Generate and save ECDSA keys for each curve
     for label, curve in curves.items():
         private_key_ec = ec.generate_private_key(curve)
         ec_private_pem = private_key_ec.private_bytes(
@@ -42,56 +45,43 @@ def generate_keys():
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption()
         )
-        ec_keys[label] = ec_private_pem
+        ec_public_pem = private_key_ec.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
         with open(f'{label.lower()}_private_key.pem', 'wb') as f:
             f.write(ec_private_pem)
+        with open(f'{label.lower()}_public_key.pem', 'wb') as f:
+            f.write(ec_public_pem)
+        ec_keys[label] = ec_private_pem
+    return ec_keys
 
-    return rsa_private_pem, rsa_public_pem, ec_keys
-
-rsa_private_pem, rsa_public_pem, ec_keys = generate_keys()
-
-# HMAC keys
-hmac_keys = {
-    'HS256': 'secret256',
-    'HS384': 'secret384',
-    'HS512': 'secret512'
-}
-
-# Payload for JWT
-payload = {
-    'sub': SUBJECT,
-    'exp': datetime.datetime.utcnow() + ONE_HOUR,
-    'roles': ROLES
-}
-
-# Function to generate JWT for a given algorithm
-def generate_jwt(algorithm, key):
-    return jwt.encode(payload, key, algorithm=algorithm)
-
-# Generate and print JWTs for all supported algorithms
-def print_all_jwts():
-    # Read RSA key from file
-    with open('rsa_private_key.pem', 'rb') as f:
-        rsa_private_key = f.read()
-
-    # Algorithms and their corresponding keys
-    algorithms = {
-        'HS256': hmac_keys['HS256'],
-        'HS384': hmac_keys['HS384'],
-        'HS512': hmac_keys['HS512'],
-        'RS256': rsa_private_key,
-        'RS384': rsa_private_key,
-        'RS512': rsa_private_key,
-        'PS256': rsa_private_key,
-        'PS384': rsa_private_key,
-        'PS512': rsa_private_key,
-        'ES256': ec_keys['ES256'],
-        'ES384': ec_keys['ES384'],
-        'ES512': ec_keys['ES512']
+def generate_jwt(key, algorithm):
+    now = datetime.datetime.utcnow()
+    payload = {
+        'sub': SUBJECT,
+        'iat': now,
+        'nbf': now,  # Or set to a future time if needed
+        'exp': now + datetime.timedelta(hours=1),  # Token expires in 1 hour
+        'roles': ROLES
     }
+    token = jwt.encode(payload, key, algorithm=algorithm)
+    return token
 
-    for alg, key in algorithms.items():
-        token = generate_jwt(alg, key)
-        print(f"JWT ({alg}): {token}")
+def main():
+    rsa_private_pem = generate_rsa_keys()
+    ec_keys = generate_ecdsa_keys()
 
-print_all_jwts()
+    # Print JWT for RSA and ECDSA
+    print("RSA JWTs:")
+    for alg in ['RS256', 'RS384', 'RS512']:
+        token = generate_jwt(rsa_private_pem, alg)
+        print(f"{alg}: {token}")
+
+    print("\nECDSA JWTs:")
+    for alg, key in ec_keys.items():
+        token = generate_jwt(key, alg)
+        print(f"{alg}: {token}")
+
+if __name__ == '__main__':
+    main()
